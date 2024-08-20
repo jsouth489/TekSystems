@@ -2,76 +2,68 @@ pipeline {
     agent any
 
     environment {
-        // Define environment variables, if necessary
         AWS_ACCESS_KEY_ID = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-        REGION = 'us-west-2'  // Replace with your preferred AWS region
+        DOCKER_IMAGE = "sample-app:latest"
     }
 
     stages {
+        stage('Checkout Code') {
+            steps {
+                git 'https://github.com/your-repo/sample-app.git'
+            }
+        }
+
         stage('Build') {
             steps {
-                echo 'Building the application...'
-                // Replace with your actual build commands
-                sh 'mvn clean package'
+                script {
+                    docker.build("$DOCKER_IMAGE")
+                }
+            }
+        }
+
+        stage('Security Scanning & Hardening') {
+            steps {
+                script {
+                    // Example using Trivy for scanning
+                    sh 'trivy image --exit-code 1 --severity HIGH $DOCKER_IMAGE'
+
+                    // Example hardening step - ensuring no root user
+                    sh '''
+                    docker inspect $DOCKER_IMAGE | grep -q '"User": ""' && exit 1 || exit 0
+                    '''
+                }
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running tests...'
-                // Replace with your actual test commands
-                sh 'mvn test'
-            }
-        }
-
-        stage('Security Scan & Hardening') {
-            steps {
-                echo 'Running security scans and hardening...'
-                // Example of running a security scan, replace with your tool of choice (e.g., OWASP ZAP, Snyk, Trivy)
-                sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL .'
-                
-                echo 'Applying security hardening...'
-                // Example of security hardening steps, replace with your actual hardening process
-                sh '''
-                # Example hardening steps
-                chmod -R go-w /path/to/your/application
-                find /path/to/your/application -type f -exec chmod 644 {} \;
-                find /path/to/your/application -type d -exec chmod 755 {} \;
-                '''
+                script {
+                    docker.image("$DOCKER_IMAGE").inside {
+                        sh './run_tests.sh'
+                    }
+                }
             }
         }
 
         stage('Deploy to AWS') {
             steps {
-                echo 'Deploying the application to AWS...'
-                // Replace with your actual deployment commands
-                withAWS(region: "${env.REGION}", credentials: 'aws-credentials') {
-                    sh '''
-                    aws s3 cp target/your-application.jar s3://your-bucket-name/
-                    # You could add commands to deploy to an EC2 instance, ECS, etc.
-                    '''
+                withAWS(credentials: 'aws-credentials-id', region: 'us-west-2') {
+                    script {
+                        sh '''
+                        # Login to ECR
+                        $(aws ecr get-login --no-include-email --region us-west-2)
+                        
+                        # Tag and push the image
+                        docker tag $DOCKER_IMAGE 123456789012.dkr.ecr.us-west-2.amazonaws.com/sample-app:latest
+                        docker push 123456789012.dkr.ecr.us-west-2.amazonaws.com/sample-app:latest
+                        
+                        # Deploy using ECS (example)
+                        aws ecs update-service --cluster my-cluster --service my-service --force-new-deployment
+                        '''
+                    }
                 }
             }
         }
     }
-
-    post {
-        always {
-            echo 'Cleaning up workspace...'
-            cleanWs()
-        }
-
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-
-        failure {
-            echo 'Pipeline failed!'
-            mail to: 'dev-team@example.com',
-                 subject: "Jenkins Build Failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}",
-                 body: "Please check the build logs at ${env.BUILD_URL} for more details."
-        }
-    }
 }
-
