@@ -28,7 +28,6 @@ Terraform will show you an execution plan and ask for confirmation. Type yes to 
 
 ##Running the Dockerfile with Limited Container Permissions
 
-
 ##Steps to Run the Dockerfile:
 ##Save the Dockerfile:
 ##Save the provided Dockerfile content into a file named Dockerfile.
@@ -69,9 +68,6 @@ Terraform will show you an execution plan and ask for confirmation. Type yes to 
 ##To inspect the security context applied to the pod, use:
     kubectl describe pod secure-pod
 ##This will display detailed information about the pod, including the securityContext settings, such as the user ID, group ID, and filesystem settings.
-
-
-
 
 
 
